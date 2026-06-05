@@ -1,1 +1,15 @@
-/target
+target/
+vendor/
+
+tracy/
+profile.json.gz
+flamegraph.svg
+
+# Ignore all hidden directories, e.g. vscode/zed/DS_Store
+.*
+
+# Allow specific hidden
+!.cargo/
+!.github/
+!.gitignore
+!.gitattributes
