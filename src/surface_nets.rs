@@ -1,20 +1,27 @@
 use bevy::{
-    material::descriptor::BindGroupLayoutDescriptor,
+    core_pipeline::schedule::camera_driver,
+    material::descriptor::{
+        BindGroupLayoutDescriptor, CachedComputePipelineId, ComputePipelineDescriptor,
+    },
     prelude::*,
-    render::render_resource::{
-        BindGroupLayoutEntries, PipelineCache, ShaderStages, StorageTextureAccess, TextureFormat,
-        binding_types::{storage_buffer, texture_storage_3d},
+    render::{
+        Render, RenderApp, RenderStartup,
+        render_resource::{
+            BindGroupLayoutEntries, PipelineCache, ShaderStages, StorageTextureAccess,
+            TextureFormat,
+            binding_types::{storage_buffer, texture_storage_3d},
+        },
     },
 };
 
+const SURFACE_NET_SHADER: &'static str = "surface_net.wgsl";
+
 #[derive(Default)]
 pub struct GpuSurfaceNets;
-
 impl Plugin for GpuSurfaceNets {
     fn build(&self, app: &mut App) {
         let Some(render_app) = app.get_sub_app_mut(RenderApp) else {
             panic!("Missing RenderApp");
-            return;
         };
 
         // alright we need buffers to read from? how do we dispatch and stuff
@@ -29,7 +36,7 @@ impl Plugin for GpuSurfaceNets {
 pub const WIDTH: usize = 18;
 pub const SAMPLES: usize = WIDTH * WIDTH * WIDTH;
 
-#[derive(Debug, Component)]
+#[derive(Debug, Resource)]
 pub struct VoxelSamples {
     samples: [u32; SAMPLES],
 }
@@ -46,7 +53,11 @@ impl VoxelSamples {
     }
 }
 
-pub struct SurfaceNetPipeline {}
+#[derive(Resource)]
+pub struct SurfaceNetPipeline {
+    layout: BindGroupLayoutDescriptor,
+    pipeline: CachedComputePipelineId,
+}
 pub fn init_surface_net_pipeline(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -58,13 +69,21 @@ pub fn init_surface_net_pipeline(
             ShaderStages::COMPUTE,
             (
                 // voxels
-                texture_storage_3d(TextureFormat::R32Uint, StorageTextureAccess::ReadWrite),
+                texture_storage_3d(TextureFormat::R32Uint, StorageTextureAccess::ReadOnly),
                 // centroids
                 storage_buffer::<Vec<u32>>(false),
             ),
         ),
     );
-    let shader = asset_server.load(CENTROID_GENERATE_SHADER);
+    let shader = asset_server.load(SURFACE_NET_SHADER);
+    let pipeline = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
+        label: Some("Mesh generation compute shader".into()),
+        layout: vec![layout.clone()],
+        shader: shader.clone(),
+        entry_point: Some("compute_centroids".into()),
+        ..default()
+    });
+    commands.insert_resource(SurfaceNetPipeline { layout, pipeline });
 }
 
 pub fn prepare_voxel_buffer() {}

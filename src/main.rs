@@ -6,7 +6,7 @@ use gpu_surface_nets::surface_nets::*;
 fn main() {
     let mut app = App::new();
 
-    app.add_plugins(DefaultPlugins::default())
+    app.add_plugins(DefaultPlugins)
         .add_plugins(GpuSurfaceNets::default());
 
     app.run();
