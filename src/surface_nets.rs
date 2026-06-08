@@ -9,7 +9,7 @@ use bevy::{
         render_resource::{
             BindGroupLayoutEntries, PipelineCache, ShaderStages, StorageTextureAccess,
             TextureFormat,
-            binding_types::{storage_buffer, texture_storage_3d},
+            binding_types::{storage_buffer, texture_storage_3d, uniform_buffer},
         },
     },
 };
@@ -68,6 +68,8 @@ pub fn init_surface_net_pipeline(
         &BindGroupLayoutEntries::sequential(
             ShaderStages::COMPUTE,
             (
+                // target voxel
+                uniform_buffer::<u32>(false),
                 // voxels
                 texture_storage_3d(TextureFormat::R32Uint, StorageTextureAccess::ReadOnly),
                 // centroids
