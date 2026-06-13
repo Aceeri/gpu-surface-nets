@@ -1,6 +1,6 @@
 use bevy::{
     material::descriptor::BindGroupLayoutDescriptor,
-    platform::collections::HashMap,
+    platform::collections::{HashMap, HashSet},
     prelude::*,
     render::render_resource::{
         BindGroupLayoutEntries, ShaderStages, ShaderType, binding_types::storage_buffer_read_only,
@@ -23,7 +23,6 @@ pub struct ChunkPool {
     // GPU buffers
     voxels: Vec<u32>,
     descriptors: Vec<ChunkDescriptor>,
-    free_slots: Vec<u32>,
 
     // simulation
     claim_jobs: Vec<ClaimJob>,
@@ -37,7 +36,12 @@ pub struct ChunkPool {
     remove: Vec<u32>,
 
     // CPU-side management
+    free_slots: Vec<u32>,
     chunk_map: HashMap<IVec3, u32>,
+
+    // slots to upload to GPU buffers
+    voxel_upload: HashSet<u32>,
+    descriptor_upload: HashSet<u32>,
 }
 
 impl ChunkPool {
@@ -45,7 +49,6 @@ impl ChunkPool {
         Self {
             voxels: Vec::new(),
             descriptors: Vec::new(),
-            free_slots: Vec::new(),
 
             claim_jobs: Vec::new(),
             claims: Vec::new(),
@@ -53,7 +56,11 @@ impl ChunkPool {
             need: Vec::new(),
             remove: Vec::new(),
 
+            free_slots: Vec::new(),
             chunk_map: HashMap::new(),
+
+            voxel_upload: HashSet::new(),
+            descriptor_upload: HashSet::new(),
         }
     }
 
@@ -98,10 +105,13 @@ impl ChunkPool {
                 descriptor.neighbors[index] = *neighbor_slot;
                 let inverse_index = ChunkDescriptor::linearize_offset(-offset);
                 self.descriptors[*neighbor_slot as usize].neighbors[inverse_index] = slot;
+                self.descriptor_upload.insert(*neighbor_slot);
             }
         }
 
         self.descriptors[slot as usize] = descriptor;
+        self.voxel_upload.insert(slot);
+        self.descriptor_upload.insert(slot);
     }
 
     pub fn remove_chunk(&mut self, chunk_position: IVec3) {
@@ -120,13 +130,15 @@ impl ChunkPool {
 
             self.descriptors[*neighbor_slot as usize].neighbors
                 [ChunkDescriptor::inverse_index(index)] = ABSENT;
+            self.descriptor_upload.insert(*neighbor_slot);
         }
 
         // Should we garble the ChunkDescriptor or make it obviously dead/freed?
     }
 }
 
-#[derive(Copy, Clone, ShaderType)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable, ShaderType)]
+#[repr(C)]
 pub struct ChunkDescriptor {
     world_position: IVec3,
     lod: u32,
